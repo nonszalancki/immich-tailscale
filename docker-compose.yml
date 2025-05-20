@@ -1,0 +1,113 @@
+# This is a modified version of the docker-compose.yml file from the Immich repository.
+# There is no machine learning container in this version. If you want to use machine learning, you need to install the immich-server-ml version or run machine learning container on another machine.
+# If you encounter problems with installing Immich as a docker compose container be sure to check official instructions https://immich.app/docs/install/docker-compose
+# Make sure to use the docker-compose.yml of the current release:
+# https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
+# The compose file on main may not be compatible with the latest release.
+
+name: immich
+
+services:
+  immich-server:
+    container_name: immich_server
+    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
+    volumes:
+      # Do not edit the next line. If you want to change the media storage location on your system, edit the value of UPLOAD_LOCATION in the .env file
+      - ${UPLOAD_LOCATION}:/usr/src/app/upload
+      - /etc/localtime:/etc/localtime:ro
+    env_file:
+      - .env
+    ports:
+      - 0.0.0.0:2283:2283
+    depends_on:
+      - redis
+      - database
+    restart: always
+    healthcheck:
+      disable: false
+    networks:
+      - immich # use the same network for all containers
+
+  redis:
+    container_name: immich_redis
+    image: docker.io/valkey/valkey:8-bookworm@sha256:42cba146593a5ea9a622002c1b7cba5da7be248650cbb64ecb9c6c33d29794b1
+    healthcheck:
+      test: redis-cli ping || exit 1
+    restart: always
+    networks:
+      - immich # use the same network for all containers
+
+  database:
+    container_name: immich_postgres
+    image: docker.io/tensorchord/pgvecto-rs:pg14-v0.2.0@sha256:739cdd626151ff1f796dc95a6591b55a714f341c737e27f045019ceabf8e8c52
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_DB: ${DB_DATABASE_NAME}
+      POSTGRES_INITDB_ARGS: '--data-checksums'
+    volumes:
+      # Do not edit the next line. If you want to change the database storage location on your system, edit the value of DB_DATA_LOCATION in the .env file
+      - ${DB_DATA_LOCATION}:/var/lib/postgresql/data
+    healthcheck:
+      test: >-
+        pg_isready --dbname="$${POSTGRES_DB}" --username="$${POSTGRES_USER}" || exit 1; Chksum="$$(psql --dbname="$${POSTGRES_DB}" --username="$${POSTGRES_USER}" --tuples-only --no-align --command='SELECT COALESCE(SUM(checksum_failures), 0) FROM pg_stat_database')"; echo "checksum failure count is $$Chksum"; [ "$$Chksum" = '0' ] || exit 1
+      interval: 5m
+      start_interval: 30s
+      start_period: 5m
+    command: >-
+      postgres -c shared_preload_libraries=vectors.so -c 'search_path="$$user", public, vectors' -c logging_collector=on -c max_wal_size=2GB -c shared_buffers=512MB -c wal_compression=on
+    restart: always
+    networks:
+      - immich # use the same network for all containers
+
+  caddy:
+    image: caddy
+    container_name: immich_caddy
+    hostname: caddy
+    networks:
+      - immich # use the same network for all containers
+    depends_on:
+      - tailscale
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - /data
+      - /config
+      - sock_volume:/var/run/tailscale
+    restart: unless-stopped
+
+  tailscale:
+        container_name: immich_tailscale
+        image: tailscale/tailscale
+        network_mode: host
+        # you can use your own hostname, make sure it matches the one in Caddyfile
+        hostname: immich
+        cap_add:
+            - NET_ADMIN
+            - NET_RAW
+        volumes:
+            # saves container state after container is recreated
+            - ./tailscale:/var/lib/tailscale
+            # containerized version of tailscale uses /tmp/tailscaled.sock
+            # binds the socket to a docker volume so it can be accessed by other containers
+            # this can't be a local directory because the socket is created by the container
+            - sock_volume:/tmp
+        environment:
+            TS_AUTHKEY: tskey-client- # use your own key
+            TS_EXTRA_ARGS: --advertise-tags=tag:immich  # you can use your own tag, set it first in tailscale admin console. You can find more info here: https://tailscale.com/kb/1068/tags
+            TS_STATE_DIR: /var/lib/tailscale # prevents a new machine from being added each time the container is restarted
+            TS_USERSPACE_NETWORKING: userspace-networking # https://tailscale.com/kb/1112/userspace-networking
+        restart: unless-stopped
+
+volumes:
+  sock_volume:
+
+
+networks:
+  immich:
+    name: immich
+
+
