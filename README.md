@@ -39,7 +39,7 @@ Later on you can define some Access Control Lists (ACLs) here for you machines.
 	- Set your tag: `TS_EXTRA_ARGS: --advertise-tags=tag:your_tag`, by default it will be set to `immich`. 
 	- Make sure your ` TS_AUTHKEY:` is set to OAuth key you've generated.
 
-## Running serverand getting TLS Certificates
+## Running server and getting TLS Certificates
 
 1. Open your terminal and navigate to `immich-tailscale`
 2. Run `docker compose up -d`, depending on your machine hardware and interned connection speed this can take a few minutes.
@@ -50,4 +50,4 @@ Later on you can define some Access Control Lists (ACLs) here for you machines.
 
 ## Setup remote machine learning
 
-Setting up remote machine learning depends on a hardware. Navigate to the `immich_remote_ml` folder on your pc and fill the `docker-compose.yml` using [instructions on the immich site](https://immich.app/docs/guides/remote-machine-learning).
+Setting up remote machine learning depends on a hardware. Navigate to the `immich_remote_ml` folder on your pc and fill the `compose.yaml` and `hwaccel.ml.yml` using [instructions on the immich site](https://immich.app/docs/guides/remote-machine-learning).
